@@ -55,7 +55,6 @@ if uploaded_mat is not None:
     if st.button("🔍 Analyze"):
         with open("temp_data.mat", "wb") as f:
             f.write(uploaded_mat.read())
-    main()  # 👉 Gọi xử lý chính sau khi lưu file thành công
 def load_test_data(file_path="temp_data.mat"):
     try:
         mat = scipy.io.loadmat(file_path)
