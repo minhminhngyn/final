@@ -110,7 +110,7 @@ def main():
         ).to(device)
 
     results = evaluate_model(model, data)
-  class_names = [f'Class {i}' for i in range(results['confusion_matrix'].shape[0])]
+    class_names = [f'Class {i}' for i in range(results['confusion_matrix'].shape[0])]
     visualize_results(results, class_names)
 
     results_df = pd.DataFrame({
