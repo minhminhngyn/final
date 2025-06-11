@@ -53,4 +53,4 @@ if uploaded_file is not None:
         st.markdown("#### 📈 Feature Importance Bar Chart")
         st.bar_chart(importance_df.set_index('Feature').head(10))
 else:
-    st.info("👈 Please upload a CSV file to begin.")
+    st.info("👈 Please upload a MAT file to begin.")
