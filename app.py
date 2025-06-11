@@ -86,10 +86,6 @@ def main():
         print("Preprocessed data file not found. Please run the preprocessing step first.")
         return
 
-    data = create_test_graph(features, labels)
-    data = data.to(device)
-    print(f"Created test graph with {data.x.shape[0]} nodes and {data.edge_index.shape[1]} edges")
-
     model_path = "trained_model.pt"
     try:
         num_classes = 2 # Assuming binary classification
