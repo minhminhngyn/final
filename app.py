@@ -65,7 +65,7 @@ def load_test_data(file_path="temp_data.mat"):
         raise
 def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"Using device: {device}")
+    model_path = "trained_model.pt"
     try:
         features, labels = load_test_data()
         print(f"Loaded test data: {features.shape[0]} samples, {features.shape[1]} features")
