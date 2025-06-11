@@ -9,7 +9,6 @@ from torch_geometric.data import Data
 from torch_geometric.nn import GCNConv, GATConv
 from sklearn.metrics import precision_recall_fscore_support, roc_auc_score, mean_squared_error, mean_absolute_error
 import warnings
-import shap
 import matplotlib.pyplot as plt
 from torch.amp import autocast, GradScaler
 
