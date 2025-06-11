@@ -4,6 +4,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 import pandas as pd
 import numpy as np
+import streamlit as st
 from sklearn.neighbors import NearestNeighbors
 from torch_geometric.data import Data
 from torch_geometric.nn import GCNConv, GATConv
