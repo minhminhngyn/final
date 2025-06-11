@@ -83,7 +83,6 @@ def main():
             dropout=0.27  # Correct dropout
         ).to(device)
         model.load_state_dict(torch.load(model_path, map_location=device))
-        print(f"Loaded model from {model_path}")
     except FileNotFoundError:
         print(f"Không tìm thấy tệp mô hình {model_path}. Sử dụng mô hình chưa huấn luyện.")
         num_classes = len(np.unique(labels))
@@ -97,7 +96,7 @@ def main():
     results = evaluate_model(model, data)
     class_names = [f'Class {i}' for i in range(results['confusion_matrix'].shape[0])]
     visualize_results(results, class_names)
-
+    torch.save(model.state_dict(), "trained_model.pt")
     results_df = pd.DataFrame({
         'predicted_label': results['predictions']
     })
