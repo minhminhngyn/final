@@ -11,95 +11,118 @@ import scipy.io
 import os
 
 # ======================== MODEL ========================
-class HybridGATGCN(nn.Module):
-    def __init__(self, in_dim, hidden_dim, out_dim, heads=2, dropout=0.5):
+class HybridGATGCN(torch.nn.Module):
+    def __init__(self, in_dim, hidden_dim, out_dim, heads=8, dropout=0.27):
         super(HybridGATGCN, self).__init__()
         self.dropout = dropout
+
+        # Layer 1
         self.gcn1 = GCNConv(in_dim, hidden_dim)
-        self.bn1 = nn.BatchNorm1d(hidden_dim)
+        self.bn1 = torch.nn.BatchNorm1d(hidden_dim)
         self.gat1 = GATConv(hidden_dim, hidden_dim, heads=heads, concat=False, dropout=dropout)
+
+        # Layer 2
         self.gcn2 = GCNConv(hidden_dim, hidden_dim)
-        self.bn2 = nn.BatchNorm1d(hidden_dim)
+        self.bn2 = torch.nn.BatchNorm1d(hidden_dim)
         self.gat2 = GATConv(hidden_dim, out_dim, heads=heads, concat=False, dropout=dropout)
 
     def forward(self, x, edge_index):
+        # Layer 1
         x = self.gcn1(x, edge_index)
         x = self.bn1(x)
-        x = F.relu(x)
-        x = F.dropout(x, p=self.dropout, training=self.training)
+        x = torch.nn.functional.relu(x)
+        x = torch.nn.functional.dropout(x, p=self.dropout, training=self.training)
         x = self.gat1(x, edge_index)
-        x = F.relu(x)
+
+        # Layer 2
+        x = torch.nn.functional.relu(x)
         x = self.gcn2(x, edge_index)
         x = self.bn2(x)
-        x = F.relu(x)
-        x = F.dropout(x, p=self.dropout, training=self.training)
+        x = torch.nn.functional.relu(x)
+        x = torch.nn.functional.dropout(x, p=self.dropout, training=self.training)
         x = self.gat2(x, edge_index)
-        return F.log_softmax(x, dim=1)
 
-def create_graph(features, labels, n_neighbors=5):
-    nbrs = NearestNeighbors(n_neighbors=n_neighbors).fit(features)
-    knn_adj = nbrs.kneighbors_graph(features, mode='connectivity')
-    edge_index = np.array(knn_adj.nonzero())
-    edge_index = torch.tensor(edge_index, dtype=torch.long)
-
-    x_tensor = torch.tensor(features, dtype=torch.float32)
-    y_tensor = torch.tensor(labels, dtype=torch.long)
-
-    num_nodes = x_tensor.shape[0]
-    train_ratio, val_ratio = 0.7, 0.15
-    num_train = int(train_ratio * num_nodes)
-    num_val = int(val_ratio * num_nodes)
-
-    indices = torch.randperm(num_nodes)
-    train_mask = torch.zeros(num_nodes, dtype=torch.bool)
-    val_mask = torch.zeros(num_nodes, dtype=torch.bool)
-    test_mask = torch.zeros(num_nodes, dtype=torch.bool)
-
-    train_mask[indices[:num_train]] = True
-    val_mask[indices[num_train:num_train + num_val]] = True
-    test_mask[indices[num_train + num_val:]] = True
-
-    return Data(x=x_tensor, edge_index=edge_index, y=y_tensor,
-                train_mask=train_mask, val_mask=val_mask, test_mask=test_mask)
-
+        return torch.nn.functional.log_softmax(x, dim=1)
 # ======================== STREAMLIT UI ========================
 st.set_page_config(page_title="Batch Transaction Detection with GAT-GCN", layout="wide")
 st.title("📊 Batch Transaction Anomaly Detection")
 
 uploaded_mat = st.file_uploader("Upload your .mat file (containing 'features' and 'label')", type=["mat"])
 
-if uploaded_mat is not None:
-    st.success("📁 File uploaded successfully.")
-
+def load_test_data(file_path):
+    """
+    Tải dữ liệu kiểm thử từ file CSV
+    """
+    try:
+        df = pd.read_csv(file_path)
+        if 'label' not in df.columns:
+            raise ValueError("Không tìm thấy cột 'label' trong dữ liệu")
+        if uploaded_mat is not None:
+            st.success("📁 File uploaded successfully.")
+        labels = df.pop('label').values
+        features = df.values
+        return features, labels
+    except Exception as e:
+        print(f"Lỗi khi tải dữ liệu: {e}")
+        raise
     if st.button("🔍 Analyze"):
         with open("temp_data.mat", "wb") as f:
             f.write(uploaded_mat.read())
 
-        mat = scipy.io.loadmat("temp_data.mat")
-        features = mat["features"]
-        labels = np.zeros(features.shape[0], dtype=int)
-        feature_names = [f"feat_{i}" for i in range(features.shape[1])]
-        data = create_graph(features, labels)
+      def main():
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f"Using device: {device}")
 
+    test_file_path = "preprocessed_data.csv"
+    try:
+        features, labels = load_test_data(test_file_path)
+        print(f"Loaded test data: {features.shape[0]} samples, {features.shape[1]} features")
+    except FileNotFoundError:
+        print("Preprocessed data file not found. Please run the preprocessing step first.")
+        return
+
+    data = create_test_graph(features, labels)
+    data = data.to(device)
+    print(f"Created test graph with {data.x.shape[0]} nodes and {data.edge_index.shape[1]} edges")
+
+    model_path = "trained_model.pt"
+    try:
+        num_classes = 2 # Assuming binary classification
+        model = HybridGATGCN(
+            in_dim=features.shape[1],  # Update in_dim to features.shape[1]
+            hidden_dim=256,  # Correct hidden dimension
+            out_dim=num_classes,
+            heads=8,  # Correct heads
+            dropout=0.27  # Correct dropout
+        ).to(device)
+
+        model.load_state_dict(torch.load(model_path, map_location=device))
+        print(f"Loaded model from {model_path}")
+    except FileNotFoundError:
+        print(f"Không tìm thấy tệp mô hình {model_path}. Sử dụng mô hình chưa huấn luyện.")
+        num_classes = len(np.unique(labels))
         model = HybridGATGCN(
             in_dim=features.shape[1],
-            hidden_dim=256,
-            out_dim=len(np.unique(labels)),
+            hidden_dim=128,
+            out_dim=num_classes,
             heads=8,
             dropout=0.27
-        )
+        ).to(device)
 
-        model.load_state_dict(torch.load("trained_model.pt", map_location="cpu"))
-        model.eval()
+    results = evaluate_model(model, data)
+  class_names = [f'Class {i}' for i in range(results['confusion_matrix'].shape[0])]
+    visualize_results(results, class_names)
 
-        with torch.no_grad():
-            out = model(data.x, data.edge_index)
-            preds = out.argmax(dim=1).numpy()
+    results_df = pd.DataFrame({
+        'true_label': results['true_labels'],
+        'predicted_label': results['predictions']
+    })
 
-        df_result = pd.DataFrame(features, columns=feature_names)
-        df_result['True Label'] = labels
-        df_result['Predicted Label'] = preds
 
+    for i in range(results['probabilities'].shape[1]):
+        results_df[f'prob_class_{i}'] = results['probabilities'][:, i]
+
+    results_df.to_csv('test_predictions.csv', index=False)
         st.success("✅ Prediction Completed")
         st.dataframe(df_result.head(20))
 
