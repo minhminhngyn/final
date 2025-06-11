@@ -1,7 +1,8 @@
-torch
-torch_geometric
 streamlit
+torch
+torch-geometric
 scikit-learn
-numpy
-pandas
 matplotlib
+shap
+pandas
+numpy
