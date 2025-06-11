@@ -110,7 +110,7 @@ def main():
             dropout=0.27
         ).to(device)
 
-   results = evaluate_model(model, data)
+    results = evaluate_model(model, data)
     class_names = [f'Class {i}' for i in range(results['confusion_matrix'].shape[0])]
     visualize_results(results, class_names)
 
@@ -121,7 +121,7 @@ def main():
 
     for i in range(results['probabilities'].shape[1]):
         results_df[f'prob_class_{i}'] = results['probabilities'][:, i]
-    
+
     # Lưu file
     results_df.to_csv('test_predictions.csv', index=False)
 
@@ -131,7 +131,6 @@ def main():
 
     csv = results_df.to_csv(index=False).encode('utf-8')
     st.download_button("📥 Download Prediction Results", data=csv, file_name="prediction_results.csv", mime='text/csv')
-
 
 # Gọi main trong Streamlit
 if __name__ == "__main__":
