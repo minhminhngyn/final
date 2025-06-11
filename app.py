@@ -33,7 +33,7 @@ if uploaded_file is not None:
     - **Recall:** %.4f  
     - **ROC-AUC:** %.4f
     """ % (
-        *evaluate(model, create_graph(*load_data("user_uploaded_data.csv"))[0],
+        evaluate(model, create_graph(*load_data("user_uploaded_data.csv"))[0],
                   create_graph(*load_data("user_uploaded_data.csv"))[0].test_mask)[i]
         for i in [0, 4, 5, 1]  # Acc, F1, Recall, ROC-AUC
     ))
