@@ -83,7 +83,19 @@ def main():
             out_dim=num_classes,
             heads=8,  # Correct heads
             dropout=0.27  # Correct dropout
-        ).to(device)
+        )
+        if model_path and not train_new:
+        try:
+            model.load_state_dict(torch.load(model_path, map_location=device))
+            print(f"Loaded model from {model_path}")
+        except Exception as e:
+            print("Training new model...")
+            model, _ = train(model, data, epochs=50, lr=0.01, alpha=0.1, weight_decay=5e-4)
+            torch.save(model.state_dict(), "trained_model.pt")
+        else:
+        print("Training new model...")
+        model, _ = train(model, data, epochs=50, lr=0.01, alpha=0.1, weight_decay=5e-4)
+        torch.save(model.state_dict(), "trained_model.pt")
         model.load_state_dict(torch.load(model_path, map_location=device))
     except FileNotFoundError:
         print(f"Không tìm thấy tệp mô hình {model_path}. Sử dụng mô hình chưa huấn luyện.")
