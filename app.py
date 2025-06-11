@@ -59,9 +59,9 @@ def load_test_data(file_path):
             raise ValueError("Không tìm thấy cột 'label' trong dữ liệu")
         if uploaded_mat is not None:
             st.success("📁 File uploaded successfully.")
-        if st.button("🔍 Analyze"):
-            with open("temp_data.mat", "wb") as f:
-                f.write(uploaded_mat.read())
+            if st.button("🔍 Analyze"):
+                with open("temp_data.mat", "wb") as f:
+                    f.write(uploaded_mat.read())
         labels = df.pop('label').values
         features = df.values
         return features, labels
