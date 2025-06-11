@@ -77,7 +77,7 @@ if uploaded_mat is not None:
 
         mat = scipy.io.loadmat("temp_data.mat")
         features = mat["features"]
-        labels = mat["label"].ravel()
+        labels = np.zeros(features.shape[0], dtype=int)
         feature_names = [f"feat_{i}" for i in range(features.shape[1])]
         data = create_graph(features, labels)
 
