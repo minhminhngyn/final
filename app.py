@@ -8,7 +8,7 @@ from model import run_pipeline, load_data, create_graph, HybridGATGCN
 st.set_page_config(page_title="Fraud Detection GNN", layout="wide")
 st.title("🚨 Fraud Transaction Detection with GNN")
 
-st.markdown("Upload a CSV file containing transaction data (including a 'label' column). The model will predict fraudulent transactions.")
+st.markdown("Upload a MAT file containing transaction data (including a 'label' column). The model will predict fraudulent transactions.")
 
 uploaded_file = st.file_uploader("Upload MAT", type="mat")
 
