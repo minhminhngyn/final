@@ -1,7 +1,7 @@
-# model.py
-import scipy.io
+# model.py (updated for unlabeled CSV input -> .mat processing -> CSV output)
 import numpy as np
 import pandas as pd
+import scipy.io
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -11,38 +11,31 @@ from torch_geometric.nn import GCNConv, GATConv
 from sklearn.impute import KNNImputer
 from sklearn.preprocessing import FunctionTransformer, RobustScaler
 from sklearn.neighbors import NearestNeighbors
-from sklearn.metrics import precision_recall_fscore_support, roc_auc_score, mean_squared_error, mean_absolute_error
 
-# Load .mat file (user uploaded)
-def load_mat_file(mat_path):
+# Step 1: Load CSV (no labels assumed)
+def load_csv_and_convert_to_mat(csv_path, mat_path="converted_input.mat"):
+    df = pd.read_csv(csv_path)
+    features = df.values.astype(np.float32)
+    scipy.io.savemat(mat_path, {"features": features})
+    return features
+
+# Step 2: Load .mat file for internal pipeline
+def load_mat_features(mat_path):
     mat = scipy.io.loadmat(mat_path)
-    mat_data = {}
-    for key in mat:
-        if not key.startswith('__'):
-            data = mat[key]
-            if hasattr(data, "toarray"):
-                data = data.toarray()
-            mat_data[key] = data
+    features = mat.get("features")
+    return features
 
-    features = mat_data.get("features", None)
-    labels = mat_data.get("label", None)
-    if labels is not None and labels.shape[0] == 1:
-        labels = labels.ravel()
-    return features, labels
-
-# Autoencoder
+# Step 3: Autoencoder for feature extraction
 class Autoencoder(nn.Module):
     def __init__(self, input_dim, encoding_dim):
         super().__init__()
         self.encoder = nn.Sequential(
-            nn.Linear(input_dim, 256), nn.LeakyReLU(0.2),
-            nn.Dropout(0.3),
+            nn.Linear(input_dim, 256), nn.LeakyReLU(0.2), nn.Dropout(0.3),
             nn.Linear(256, 128), nn.LeakyReLU(0.2),
             nn.Linear(128, encoding_dim)
         )
         self.decoder = nn.Sequential(
-            nn.Linear(encoding_dim, 128), nn.LeakyReLU(0.2),
-            nn.Dropout(0.3),
+            nn.Linear(encoding_dim, 128), nn.LeakyReLU(0.2), nn.Dropout(0.3),
             nn.Linear(128, 256), nn.LeakyReLU(0.2),
             nn.Linear(256, input_dim)
         )
@@ -50,56 +43,42 @@ class Autoencoder(nn.Module):
     def forward(self, x):
         return self.decoder(self.encoder(x))
 
-def train_autoencoder(features, encoding_dim=10, epochs=100, lr=0.001, patience=5):
+def train_autoencoder(features, encoding_dim=10):
     model = Autoencoder(features.shape[1], encoding_dim)
+    optimizer = optim.Adam(model.parameters(), lr=0.001)
     criterion = nn.MSELoss()
-    optimizer = optim.Adam(model.parameters(), lr=lr)
     data = torch.FloatTensor(features)
-    best_loss, no_improve = float('inf'), 0
-
-    for epoch in range(epochs):
-        model.train()
+    model.train()
+    for _ in range(50):
         optimizer.zero_grad()
-        output = model(data)
-        loss = criterion(output, data)
+        loss = criterion(model(data), data)
         loss.backward()
         optimizer.step()
-        if loss.item() < best_loss:
-            best_loss = loss.item()
-            no_improve = 0
-        else:
-            no_improve += 1
-        if no_improve >= patience:
-            break
-
     model.eval()
     with torch.no_grad():
         return model.encoder(data).numpy()
 
-def preprocess_data(features, labels, encoding_dim=10):
-    features = KNNImputer(n_neighbors=5).fit_transform(features)
+# Step 4: Preprocess data
+
+def preprocess_data(features):
+    features = KNNImputer().fit_transform(features)
     features = FunctionTransformer(np.log1p).fit_transform(np.clip(features, 1e-6, None))
     features = RobustScaler(quantile_range=(5, 95)).fit_transform(features)
-    features = train_autoencoder(features, encoding_dim)
-    return features, labels
+    features = train_autoencoder(features, encoding_dim=16)
+    return features
 
-def create_graph(features, labels, k=5):
-    edge_index = np.array(NearestNeighbors(n_neighbors=k).fit(features).kneighbors_graph(mode='connectivity').nonzero())
-    edge_index = torch.tensor(edge_index, dtype=torch.long)
+# Step 5: Create graph for GNN
+
+def create_graph(features, k=5):
+    nbrs = NearestNeighbors(n_neighbors=k).fit(features)
+    edge_index = torch.tensor(np.array(nbrs.kneighbors_graph(mode="connectivity").nonzero()), dtype=torch.long)
     x = torch.tensor(features, dtype=torch.float32)
-    y = torch.tensor(labels, dtype=torch.long)
-    num_nodes = x.shape[0]
-    idx = torch.randperm(num_nodes)
-    train_mask = torch.zeros(num_nodes, dtype=torch.bool)
-    val_mask = torch.zeros(num_nodes, dtype=torch.bool)
-    test_mask = torch.zeros(num_nodes, dtype=torch.bool)
-    train_mask[idx[:int(0.7*num_nodes)]] = True
-    val_mask[idx[int(0.7*num_nodes):int(0.85*num_nodes)]] = True
-    test_mask[idx[int(0.85*num_nodes):]] = True
-    return Data(x=x, edge_index=edge_index, y=y, train_mask=train_mask, val_mask=val_mask, test_mask=test_mask)
+    return Data(x=x, edge_index=edge_index)
+
+# Step 6: GAT-GCN hybrid model
 
 class HybridGATGCN(nn.Module):
-    def __init__(self, in_dim, hidden_dim, out_dim, heads=2, dropout=0.5):
+    def __init__(self, in_dim, hidden_dim, out_dim, heads=2, dropout=0.3):
         super().__init__()
         self.gcn1 = GCNConv(in_dim, hidden_dim)
         self.bn1 = nn.BatchNorm1d(hidden_dim)
@@ -110,48 +89,50 @@ class HybridGATGCN(nn.Module):
         self.dropout = dropout
 
     def forward(self, x, edge_index):
-        x = self.gcn1(x, edge_index)
-        x = self.bn1(x)
-        x = F.relu(x)
+        x = F.relu(self.bn1(self.gcn1(x, edge_index)))
         x = F.dropout(x, p=self.dropout, training=self.training)
-        x = self.gat1(x, edge_index)
-        x = F.relu(x)
-        x = self.gcn2(x, edge_index)
-        x = self.bn2(x)
-        x = F.relu(x)
+        x = F.relu(self.gat1(x, edge_index))
+        x = F.relu(self.bn2(self.gcn2(x, edge_index)))
         x = F.dropout(x, p=self.dropout, training=self.training)
-        return F.log_softmax(self.gat2(x, edge_index), dim=1)
+        return self.gat2(x, edge_index)
 
-def train(model, data, epochs=30, lr=0.01):
-    optimizer = optim.Adam(model.parameters(), lr=lr)
-    loss_fn = nn.CrossEntropyLoss()
+# Step 7: Detect anomalies by distance from center
+
+def detect_anomalies(model, data):
+    model.eval()
+    with torch.no_grad():
+        z = model(data.x, data.edge_index)
+        center = z.mean(dim=0)
+        scores = torch.norm(z - center, dim=1)
+        threshold = torch.quantile(scores, 0.95)
+        preds = (scores > threshold).int().numpy()
+    return preds, scores.numpy()
+
+# Step 8: Full pipeline
+
+def run_pipeline_from_csv(csv_path, output_csv_path="anomalies_output.csv"):
+    features = load_csv_and_convert_to_mat(csv_path)
+    features = preprocess_data(features)
+    data = create_graph(features)
+    model = HybridGATGCN(in_dim=features.shape[1], hidden_dim=128, out_dim=32)
+    model = train(model, data, epochs=30)
+    preds, scores = detect_anomalies(model, data)
+
+    # Save output CSV
+    df = pd.DataFrame(features, columns=[f"feat_{i}" for i in range(features.shape[1])])
+    df["anomaly_score"] = scores
+    df["is_anomaly"] = preds
+    df.to_csv(output_csv_path, index=False)
+    print(f"Saved anomaly results to {output_csv_path}")
+    return output_csv_path
+
+def train(model, data, epochs=30):
+    optimizer = optim.Adam(model.parameters(), lr=0.01)
     for _ in range(epochs):
         model.train()
         optimizer.zero_grad()
         out = model(data.x, data.edge_index)
-        loss = loss_fn(out[data.train_mask], data.y[data.train_mask])
+        loss = torch.mean(torch.norm(out - out.mean(dim=0), dim=1))  # simple representation loss
         loss.backward()
         optimizer.step()
     return model
-
-def predict_and_export(model, data, output_path="fraud_output.mat"):
-    model.eval()
-    with torch.no_grad():
-        out = model(data.x, data.edge_index)
-        preds = out.argmax(dim=1).cpu().numpy()
-        features = data.x.cpu().numpy()
-        fraud_indices = np.where(preds == 1)[0]
-        scipy.io.savemat(output_path, {
-            "fraud_indices": fraud_indices,
-            "fraud_features": features[fraud_indices],
-            "all_predictions": preds
-        })
-    return output_path
-
-def run_pipeline(mat_file):
-    features, labels = load_mat_file(mat_file)
-    features, labels = preprocess_data(features, labels)
-    data = create_graph(features, labels)
-    model = HybridGATGCN(in_dim=features.shape[1], hidden_dim=128, out_dim=len(np.unique(labels)))
-    model = train(model, data)
-    return predict_and_export(model, data)
