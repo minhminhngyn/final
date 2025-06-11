@@ -14,14 +14,17 @@ class HybridGATGCN(torch.nn.Module):
     def __init__(self, in_dim, hidden_dim, out_dim, heads=8, dropout=0.27):
         super(HybridGATGCN, self).__init__()
         self.dropout = dropout
+
         # Layer 1
         self.gcn1 = GCNConv(in_dim, hidden_dim)
         self.bn1 = torch.nn.BatchNorm1d(hidden_dim)
         self.gat1 = GATConv(hidden_dim, hidden_dim, heads=heads, concat=False, dropout=dropout)
+
         # Layer 2
         self.gcn2 = GCNConv(hidden_dim, hidden_dim)
         self.bn2 = torch.nn.BatchNorm1d(hidden_dim)
         self.gat2 = GATConv(hidden_dim, out_dim, heads=heads, concat=False, dropout=dropout)
+
     def forward(self, x, edge_index):
         # Layer 1
         x = self.gcn1(x, edge_index)
@@ -29,6 +32,7 @@ class HybridGATGCN(torch.nn.Module):
         x = torch.nn.functional.relu(x)
         x = torch.nn.functional.dropout(x, p=self.dropout, training=self.training)
         x = self.gat1(x, edge_index)
+
         # Layer 2
         x = torch.nn.functional.relu(x)
         x = self.gcn2(x, edge_index)
@@ -36,6 +40,7 @@ class HybridGATGCN(torch.nn.Module):
         x = torch.nn.functional.relu(x)
         x = torch.nn.functional.dropout(x, p=self.dropout, training=self.training)
         x = self.gat2(x, edge_index)
+
         return torch.nn.functional.log_softmax(x, dim=1)
 # ======================== STREAMLIT UI ========================
 st.set_page_config(page_title="Batch Transaction Detection with GAT-GCN", layout="wide")
@@ -43,36 +48,33 @@ st.title("📊 Batch Transaction Anomaly Detection")
 uploaded_mat = st.file_uploader("Upload your .mat file (containing 'features' and 'label')", type=["mat"])
 if uploaded_mat is not None:
     st.success("📁 File uploaded successfully.")
-
-    if st.button("🔍 Analyze"):
-        with open("temp_data.mat", "wb") as f:
-            f.write(uploaded_mat.read())
+    st.button("🔍 Analyze")
 def load_test_data(file_path="temp_data.mat"):
+    """
+    Tải dữ liệu kiểm thử từ file CSV
+    """
     try:
-        mat = scipy.io.loadmat(file_path)
-        if "features" not in mat:
-            raise KeyError("Không tìm thấy 'features' trong file .mat")
-        features = mat["features"]
-        if "label" in mat:
-            labels = mat["label"].ravel()
-            st.info("✅ Đã tìm thấy nhãn 'label'.")
-        else:
-            st.warning("⚠️ Không tìm thấy nhãn 'label'. Gán mặc định tất cả là 0.")
-            labels = np.zeros(features.shape[0], dtype=int)  # giả định không có gian lận
+        df = pd.read_csv(file_path)
+        if 'label' not in df.columns:
+            raise ValueError("Không tìm thấy cột 'label' trong dữ liệu")
+
+        labels = df.pop('label').values
+        features = df.values
+
         return features, labels
     except Exception as e:
-        st.error(f"❌ Lỗi khi tải dữ liệu từ file .mat: {e}")
+        print(f"Lỗi khi tải dữ liệu: {e}")
         raise
 def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model_path = "trained_model.pt"
-    try:
-        features, labels = load_test_data()
-        print(f"Loaded test data: {features.shape[0]} samples, {features.shape[1]} features")
+   try:
+        features, labels = load_test_data(test_file_path)
     except FileNotFoundError:
         print("Preprocessed data file not found. Please run the preprocessing step first.")
         return
-        model_path = "trained_model.pt"
+    data = create_test_graph(features, labels)
+    data = data.to(device)
+    model_path = "trained_model.pt"
     try:
         num_classes = 2 # Assuming binary classification
         model = HybridGATGCN(
@@ -96,22 +98,18 @@ def main():
     results = evaluate_model(model, data)
     class_names = [f'Class {i}' for i in range(results['confusion_matrix'].shape[0])]
     visualize_results(results, class_names)
-    torch.save(model.state_dict(), "trained_model.pt")
     results_df = pd.DataFrame({
+        'true_label': results['true_labels'],
         'predicted_label': results['predictions']
     })
     if results['true_labels'] is not None and len(set(results['true_labels'])) > 1:
         results_df['true_label'] = results['true_labels']
     for i in range(results['probabilities'].shape[1]):
         results_df[f'prob_class_{i}'] = results['probabilities'][:, i]
-    # Lưu file
     results_df.to_csv('test_predictions.csv', index=False)
-    # ✅ Gọi Streamlit UI hiển thị
     st.success("✅ Prediction Completed")
     st.dataframe(results_df.head(20))
     csv = results_df.to_csv(index=False).encode('utf-8')
     st.download_button("📥 Download Prediction Results", data=csv, file_name="prediction_results.csv", mime='text/csv')
-
-# Gọi main trong Streamlit
 if __name__ == "__main__":
     main()
