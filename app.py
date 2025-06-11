@@ -1,62 +1,56 @@
 import streamlit as st
 import pandas as pd
 import torch
-from your_model_module import load_data, create_graph, HybridGATGCN  # sửa đúng tên nếu khác
+from io import BytesIO
+from tempfile import NamedTemporaryFile
+from model import run_pipeline, load_data, create_graph, HybridGATGCN
 
-def predict_on_uploaded_file(uploaded_file, model_path="trained_model.pt"):
-    # Lưu file tạm thời
-    temp_csv_path = "uploaded_input.csv"
-    with open(temp_csv_path, "wb") as f:
-        f.write(uploaded_file.getbuffer())
+st.set_page_config(page_title="Fraud Detection GNN", layout="wide")
+st.title("🚨 Fraud Transaction Detection with GNN")
 
-    # Load dữ liệu
-    features, labels, feature_names = load_data(temp_csv_path)
-    data, _ = create_graph(features, labels, feature_names=feature_names)
+st.markdown("Upload a CSV file containing transaction data (including a 'label' column). The model will predict fraudulent transactions.")
 
-    # Load model
-    device = torch.device("cpu")
-    model = HybridGATGCN(
-        in_dim=features.shape[1],
-        hidden_dim=256,
-        out_dim=len(set(labels)),
-        heads=8,
-        dropout=0.27
-    )
-    model.load_state_dict(torch.load(model_path, map_location=device))
+uploaded_file = st.file_uploader("Upload CSV", type="csv")
+
+if uploaded_file is not None:
+    with NamedTemporaryFile(delete=False, suffix=".csv") as tmp_file:
+        tmp_file.write(uploaded_file.getvalue())
+        tmp_path = tmp_file.name
+
+    st.success("✅ File uploaded successfully. Running the model...")
+
+    # Chạy pipeline
+    model, importance_df = run_pipeline(tmp_path, model_path="trained_model.pt", train_new=False)
+
+    # Dự đoán kết quả đầu ra
+    features, labels, feature_names = load_data(tmp_path)
+    data, _ = create_graph(features, labels)
     model.eval()
-
-    # Dự đoán
     with torch.no_grad():
         out = model(data.x, data.edge_index)
         pred = out.argmax(dim=1).cpu().numpy()
-        prob = torch.exp(out).cpu().numpy()[:, 1] if out.shape[1] > 1 else torch.exp(out).cpu().numpy()[:, 0]
 
-    # Kết quả
-    df_result = pd.DataFrame(features, columns=feature_names)
-    df_result['TrueLabel'] = labels
-    df_result['PredictedLabel'] = pred
-    df_result['FraudProbability'] = prob
-    return df_result
+    df_result = pd.read_csv(tmp_path)
+    df_result['Predicted_Label'] = pred
 
-# Giao diện Streamlit
-st.set_page_config(page_title="Fraud Detection Demo", layout="wide")
-st.title("🕵️ Fraud Detection Prediction")
-st.write("Upload a **preprocessed CSV file** to get predictions from the Hybrid GAT-GCN model.")
+    st.markdown("### 📊 Prediction Results")
+    st.dataframe(df_result.head(30))
 
-uploaded_file = st.file_uploader("📤 Upload your CSV file", type=["csv"])
-
-if uploaded_file:
-    st.success("✅ File uploaded successfully.")
-    with st.spinner("Predicting..."):
-        df_result = predict_on_uploaded_file(uploaded_file)
-    st.subheader("🔍 Prediction Results (Top 20)")
-    st.dataframe(df_result.head(20))
-
-    # Tải về kết quả
-    csv = df_result.to_csv(index=False).encode('utf-8')
+    # Tải kết quả về
+    csv_output = df_result.to_csv(index=False).encode('utf-8')
     st.download_button(
-        label="📥 Download Full Predictions",
-        data=csv,
-        file_name='fraud_predictions.csv',
-        mime='text/csv',
+        label="📥 Download Predictions as CSV",
+        data=csv_output,
+        file_name='predicted_results.csv',
+        mime='text/csv'
     )
+
+    # Hiển thị kết quả phân tích độ quan trọng đặc trưng (nếu có)
+    if importance_df is not None:
+        st.markdown("### 🔍 Top 10 Important Features")
+        st.dataframe(importance_df.head(10))
+
+        st.markdown("#### 📈 Feature Importance Bar Chart")
+        st.bar_chart(importance_df.set_index('Feature').head(10))
+else:
+    st.info("👈 Please upload a CSV file to begin.")
