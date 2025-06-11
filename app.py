@@ -10,10 +10,10 @@ st.title("🚨 Fraud Transaction Detection with GNN")
 
 st.markdown("Upload a CSV file containing transaction data (including a 'label' column). The model will predict fraudulent transactions.")
 
-uploaded_file = st.file_uploader("Upload CSV", type="csv")
+uploaded_file = st.file_uploader("Upload MAT", type="mat")
 
 if uploaded_file is not None:
-    with NamedTemporaryFile(delete=False, suffix=".csv") as tmp_file:
+    with NamedTemporaryFile(delete=False, suffix=".mat") as tmp_file:
         tmp_file.write(uploaded_file.getvalue())
         tmp_path = tmp_file.name
 
@@ -39,7 +39,7 @@ if uploaded_file is not None:
     # Tải kết quả về
     csv_output = df_result.to_csv(index=False).encode('utf-8')
     st.download_button(
-        label="📥 Download Predictions as CSV",
+        label="📥 Download Predictions as MAT",
         data=csv_output,
         file_name='predicted_results.csv',
         mime='text/csv'
