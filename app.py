@@ -49,6 +49,15 @@ st.title("📊 Batch Transaction Anomaly Detection")
 
 uploaded_mat = st.file_uploader("Upload your .mat file (containing 'features' and 'label')", type=["mat"])
 
+if uploaded_mat is not None:
+    st.success("📁 File uploaded successfully.")
+
+    # Nút chỉ hiện khi có file
+    if st.button("🔍 Analyze"):
+        with open("temp_data.mat", "wb") as f:
+            f.write(uploaded_mat.read())
+        # Sau khi lưu file, gọi main()
+        main()
 def load_test_data(file_path):
     """
     Tải dữ liệu kiểm thử từ file CSV
@@ -56,24 +65,13 @@ def load_test_data(file_path):
     try:
         df = pd.read_csv(file_path)
         if 'label' not in df.columns:
-            raise ValueError("Không tìm thấy cột 'label' trong dữ liệu")
-        uploaded_mat = st.file_uploader("Upload your .mat file (containing 'features' and 'label')", type=["mat"])
-        if uploaded_mat is not None:
-            st.success("📁 File uploaded successfully.")
-        if st.button("🔍 Analyze"):
-            with open("temp_data.mat", "wb") as f:
-                f.write(uploaded_mat.read())
-        main()
+            raise ValueError("Không tìm thấy cột 'label'")
         labels = df.pop('label').values
         features = df.values
         return features, labels
     except Exception as e:
-        print(f"Lỗi khi tải dữ liệu: {e}")
+        st.error(f"Lỗi: {e}")
         raise
-    if st.button("🔍 Analyze"):
-        with open("temp_data.mat", "wb") as f:
-            f.write(uploaded_mat.read())
-
 def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
