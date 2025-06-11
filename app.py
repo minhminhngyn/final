@@ -69,7 +69,7 @@ def load_test_data(file_path):
         with open("temp_data.mat", "wb") as f:
             f.write(uploaded_mat.read())
 
-    def main():
+def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
 
