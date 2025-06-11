@@ -122,13 +122,12 @@ def create_graph(features, labels, n_neighbors=5, feature_names=None):
                 train_mask=train_mask, val_mask=val_mask, test_mask=test_mask), feature_names
 
         # Load model
-       model = HybridGATGCN(
+    model = HybridGATGCN(
         in_dim=features.shape[1],
         hidden_dim=256,
         out_dim=len(np.unique(labels)),
         heads=8,
-        dropout=0.27
-    )
+        dropout=0.27)
 
     if model_path and not train_new:
         try:
