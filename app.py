@@ -33,7 +33,7 @@ product_link = st.text_input("Product Link")
 # ===== ANOMALY LOGIC =====
 def classify_transaction(actual_price, discounted_price, discount_percentage, rating, rating_count):
     reasons = []
-    if discount_percentage > 90 and rating <= 2:
+    if discount_percentage > 50 and rating <= 2:
         reasons.append("Extremely high discount with low rating")
     if rating_count <= 2 and discounted_price < 10:
         reasons.append("Very few ratings and price is too low")
