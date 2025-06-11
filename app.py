@@ -58,8 +58,20 @@ if uploaded_mat is not None:
 def load_test_data(file_path="temp_data.mat"):
     try:
         mat = scipy.io.loadmat(file_path)
+        st.write("📂 Biến trong file .mat:", list(mat.keys()))
+
+        if "features" not in mat:
+            raise KeyError("Không tìm thấy 'features' trong file .mat")
+
         features = mat["features"]
-        labels = mat["label"].ravel()  # giả định dữ liệu đã được label
+
+        if "label" in mat:
+            labels = mat["label"].ravel()
+            st.info("✅ Đã tìm thấy nhãn 'label'.")
+        else:
+            st.warning("⚠️ Không tìm thấy nhãn 'label'. Gán mặc định tất cả là 0.")
+            labels = np.zeros(features.shape[0], dtype=int)  # giả định không có gian lận
+
         return features, labels
     except Exception as e:
         st.error(f"❌ Lỗi khi tải dữ liệu từ file .mat: {e}")
@@ -107,9 +119,11 @@ def main():
     visualize_results(results, class_names)
 
     results_df = pd.DataFrame({
-        'true_label': results['true_labels'],
         'predicted_label': results['predictions']
     })
+# Nếu có nhãn thực sự
+    if results['true_labels'] is not None and len(set(results['true_labels'])) > 1:
+        results_df['true_label'] = results['true_labels']
 
     for i in range(results['probabilities'].shape[1]):
         results_df[f'prob_class_{i}'] = results['probabilities'][:, i]
