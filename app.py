@@ -56,6 +56,7 @@ if uploaded_mat is not None:
     if st.button("🔍 Analyze"):
         with open("temp_data.mat", "wb") as f:
             f.write(uploaded_mat.read())
+        main()
 def load_test_data(file_path):
     """
     Tải dữ liệu kiểm thử từ file CSV
@@ -122,8 +123,10 @@ def main():
 
     for i in range(results['probabilities'].shape[1]):
         results_df[f'prob_class_{i}'] = results['probabilities'][:, i]
-
+        
     results_df.to_csv('test_predictions.csv', index=False)
+if __name__ == "__main__":
+    main()
     st.success("✅ Prediction Completed")
     st.dataframe(df_result.head(20))
 
