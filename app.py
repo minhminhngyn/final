@@ -94,6 +94,7 @@ if uploaded_mat is not None:
             dropout=0.27
         )
         model.load_state_dict(torch.load("trained_model.pt", map_location='cpu'))
+        torch.save(model.state_dict(), "trained_model.pt")
         model.eval()
 
         with torch.no_grad():
