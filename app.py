@@ -1,32 +1,31 @@
-# app.py
+# app.py - Streamlit interface for anomaly detection
 import streamlit as st
-from model import run_pipeline
-import tempfile
 import os
+from model import run_pipeline_from_csv
 
-st.set_page_config(page_title="Fraud Detection GNN", layout="centered")
-st.title("🔍 Fraud Detection on E-commerce Transactions")
-st.markdown("Upload a `.mat` file with transaction data to detect suspicious activities.")
+st.set_page_config(page_title="Anomaly Detection with GAT-GCN", layout="centered")
+st.title("🚀 Anomaly Detection in E-commerce Transactions")
 
-uploaded_file = st.file_uploader("Upload .mat file", type=["mat"])
+st.markdown("""
+Upload a CSV file **without labels**. The system will:
+- Preprocess and extract features with autoencoder
+- Build a graph with k-NN
+- Detect anomalies using a hybrid GAT-GCN model
+- Return a CSV with `anomaly_score` and `is_anomaly` columns
+""")
+
+uploaded_file = st.file_uploader("Upload your transaction CSV file", type=["csv"])
 
 if uploaded_file is not None:
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".mat") as tmp:
-        tmp.write(uploaded_file.read())
-        tmp_path = tmp.name
+    input_path = "input_temp.csv"
+    output_path = "anomaly_output.csv"
 
-    st.info("Running model. This may take a moment...")
-    try:
-        output_path = run_pipeline(tmp_path)
-        with open(output_path, "rb") as f:
-            st.success("✅ Prediction complete! Download results below.")
-            st.download_button(
-                label="📥 Download Predicted Fraud Transactions (.mat)",
-                data=f,
-                file_name="fraud_predictions.mat",
-                mime="application/octet-stream"
-            )
-    except Exception as e:
-        st.error(f"❌ Error occurred: {e}")
-    finally:
-        os.remove(tmp_path)
+    with open(input_path, "wb") as f:
+        f.write(uploaded_file.read())
+
+    st.info("Processing... this may take a minute.")
+    result_csv = run_pipeline_from_csv(input_path, output_csv_path=output_path)
+
+    st.success("Done! Download the result below:")
+    with open(result_csv, "rb") as f:
+        st.download_button("Download Anomaly Results CSV", f, file_name="anomalies_detected.csv")
