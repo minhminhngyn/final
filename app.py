@@ -52,31 +52,24 @@ uploaded_mat = st.file_uploader("Upload your .mat file (containing 'features' an
 if uploaded_mat is not None:
     st.success("📁 File uploaded successfully.")
 
-    # Nút chỉ hiện khi có file
     if st.button("🔍 Analyze"):
         with open("temp_data.mat", "wb") as f:
             f.write(uploaded_mat.read())
-def load_test_data(file_path):
-    """
-    Tải dữ liệu kiểm thử từ file CSV
-    """
+        main()  # 👉 Gọi xử lý chính sau khi lưu file thành công
+def load_test_data(file_path="temp_data.mat"):
     try:
-        df = pd.read_csv(file_path)
-        if 'label' not in df.columns:
-            raise ValueError("Không tìm thấy cột 'label'")
-        labels = df.pop('label').values
-        features = df.values
+        mat = scipy.io.loadmat(file_path)
+        features = mat["features"]
+        labels = mat["label"].ravel()  # giả định dữ liệu đã được label
         return features, labels
     except Exception as e:
-        st.error(f"Lỗi: {e}")
+        st.error(f"❌ Lỗi khi tải dữ liệu từ file .mat: {e}")
         raise
 def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
-
-    test_file_path = "preprocessed_data.csv"
     try:
-        features, labels = load_test_data(test_file_path)
+        features, labels = load_test_data()
         print(f"Loaded test data: {features.shape[0]} samples, {features.shape[1]} features")
     except FileNotFoundError:
         print("Preprocessed data file not found. Please run the preprocessing step first.")
