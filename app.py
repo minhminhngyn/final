@@ -123,8 +123,8 @@ def main():
         results_df[f'prob_class_{i}'] = results['probabilities'][:, i]
 
     results_df.to_csv('test_predictions.csv', index=False)
-        st.success("✅ Prediction Completed")
-        st.dataframe(df_result.head(20))
+    st.success("✅ Prediction Completed")
+    st.dataframe(df_result.head(20))
 
-        csv = df_result.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Download Prediction Results", data=csv, file_name="prediction_results.csv", mime='text/csv')
+    csv = df_result.to_csv(index=False).encode('utf-8')
+    st.download_button("📥 Download Prediction Results", data=csv, file_name="prediction_results.csv", mime='text/csv')
