@@ -1,17 +1,46 @@
+
 import streamlit as st
-import pandas as pd
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import numpy as np
+from torch_geometric.data import Data
+from torch_geometric.nn import GCNConv, GATConv
 
+# Define the HybridGATGCN model
+class HybridGATGCN(nn.Module):
+    def __init__(self, in_dim, hidden_dim, out_dim, heads=2, dropout=0.5):
+        super(HybridGATGCN, self).__init__()
+        self.dropout = dropout
+        self.gcn1 = GCNConv(in_dim, hidden_dim)
+        self.bn1 = nn.BatchNorm1d(hidden_dim)
+        self.gat1 = GATConv(hidden_dim, hidden_dim, heads=heads, concat=False, dropout=dropout)
+        self.gcn2 = GCNConv(hidden_dim, hidden_dim)
+        self.bn2 = nn.BatchNorm1d(hidden_dim)
+        self.gat2 = GATConv(hidden_dim, out_dim, heads=heads, concat=False, dropout=dropout)
+
+    def forward(self, x, edge_index):
+        x = self.gcn1(x, edge_index)
+        x = self.bn1(x)
+        x = F.relu(x)
+        x = F.dropout(x, p=self.dropout, training=self.training)
+        x = self.gat1(x, edge_index)
+        x = F.relu(x)
+        x = self.gcn2(x, edge_index)
+        x = self.bn2(x)
+        x = F.relu(x)
+        x = F.dropout(x, p=self.dropout, training=self.training)
+        x = self.gat2(x, edge_index)
+        return F.log_softmax(x, dim=1)
+
+# Streamlit App UI
 st.set_page_config(page_title="Transaction Anomaly Detection System", layout="wide")
+st.title("Transaction Anomaly Detection System (GAT-GCN Based)")
 
-st.title("Transaction Anomaly Detection System")
-st.write("This tool allows fraud investigators to assess whether a transaction is potentially anomalous based on key indicators.")
-
-# ===== REQUIRED FIELDS =====
 st.header("Required Transaction Information")
 actual_price = st.number_input("Original Price (USD)", min_value=0.0)
 discounted_price = st.number_input("Discounted Price (USD)", min_value=0.0)
 
-# Auto calculate discount percentage
 discount_percentage = 0.0
 if actual_price > 0:
     discount_percentage = round((actual_price - discounted_price) / actual_price * 100, 2)
@@ -22,32 +51,35 @@ else:
 rating = st.selectbox("Product Rating (stars)", options=[1, 2, 3, 4, 5])
 rating_count = st.number_input("Number of Ratings", min_value=0)
 
-# ===== OPTIONAL FIELDS =====
+# Optional Fields (not used in model but can be logged)
 st.header("Optional Additional Information")
-category = st.text_input("Product Category")
-about_product = st.text_area("Product Description")
-review_title = st.text_input("Review Title")
-review_content = st.text_area("Review Content")
-product_link = st.text_input("Product Link")
+_ = st.text_input("Product Category")
+_ = st.text_area("Product Description")
+_ = st.text_input("Review Title")
+_ = st.text_area("Review Content")
+_ = st.text_input("Product Link")
 
-# ===== ANOMALY LOGIC =====
-def classify_transaction(actual_price, discounted_price, discount_percentage, rating, rating_count):
-    reasons = []
-    if discount_percentage > 50 and rating <= 2:
-        reasons.append("Extremely high discount with low rating")
-    if rating_count <= 2 and discounted_price < 10:
-        reasons.append("Very few ratings and price is too low")
-    if actual_price >= 500 and discounted_price <= 20:
-        reasons.append("High original price but extremely low final price")
-    return (1 if reasons else 0), reasons
-
+# Inference Logic
 if st.button("Analyze Transaction"):
-    result, reasons = classify_transaction(actual_price, discounted_price, discount_percentage, rating, rating_count)
-    if result == 1:
-        st.error("⚠️ Potential Fraudulent Transaction Detected")
-        st.write("**Reasons:**")
-        for r in reasons:
-            st.markdown(f"- {r}")
-    else:
-        st.success("✅ Transaction Appears Normal")
-        st.markdown("No suspicious indicators found.")
+    with st.spinner("Running GAT-GCN model..."):
+        # Prepare input
+        input_features = np.array([[discounted_price, actual_price, discount_percentage, rating, rating_count]])
+        x_tensor = torch.tensor(input_features, dtype=torch.float32)
+        edge_index = torch.tensor([[0], [0]], dtype=torch.long)  # self-loop
+
+        # Load model
+        model = HybridGATGCN(in_dim=5, hidden_dim=256, out_dim=2, heads=8, dropout=0.27)
+        model.load_state_dict(torch.load("trained_model.pt", map_location=torch.device("cpu")))
+        model.eval()
+
+        # Predict
+        with torch.no_grad():
+            output = model(x_tensor, edge_index)
+            pred = torch.argmax(output, dim=1).item()
+            confidence = torch.exp(output[0])[pred].item()
+
+        # Display result
+        if pred == 1:
+            st.error(f"🚨 Suspicious Transaction Detected! (Confidence: {confidence:.2%})")
+        else:
+            st.success(f"✅ Transaction Appears Normal (Confidence: {confidence:.2%})")
