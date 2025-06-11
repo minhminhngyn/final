@@ -86,7 +86,7 @@ def main():
         print("Preprocessed data file not found. Please run the preprocessing step first.")
         return
 
-    model_path = "trained_model.pt"
+        model_path = "trained_model.pt"
     try:
         num_classes = 2 # Assuming binary classification
         model = HybridGATGCN(
