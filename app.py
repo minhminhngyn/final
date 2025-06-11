@@ -127,7 +127,7 @@ def main():
 if __name__ == "__main__":
     main()
     st.success("✅ Prediction Completed")
-    st.dataframe(results_df.head(20))
+    st.Dataframe(results_df.head(20))
 
-    csv = df_result.to_csv(index=False).encode('utf-8')
+    csv = results_df.to_csv(index=False).encode('utf-8')
     st.download_button("📥 Download Prediction Results", data=csv, file_name="prediction_results.csv", mime='text/csv')
