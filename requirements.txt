@@ -1,3 +1,7 @@
+torch
+torch_geometric
 streamlit
+scikit-learn
+numpy
 pandas
-requests
+matplotlib
